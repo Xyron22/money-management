@@ -49,7 +49,7 @@
   function polishStaticLabels(){
     const heroLabel = document.querySelector("#home .hero > .dual.light");
     if(heroLabel){
-      heroLabel.innerHTML = '<div class="jp"><ruby>今月<rt>こんげつ</rt></ruby><ruby>使<rt>つか</rt></ruby>えるお<ruby>金<rt>かね</rt></ruby></div><div class="idn">Uang yang bisa dipakai bulan ini</div>';
+      heroLabel.innerHTML = '<div class="jp"><ruby>残<rt>のこ</rt></ruby>りのお<ruby>金<rt>かね</rt></ruby></div><div class="idn">Sisa uang</div>';
     }
 
     const budgetTitle = document.getElementById("budgetBtn")?.parentElement?.querySelector(".title");
@@ -99,6 +99,13 @@
     if(settingsNote){
       settingsNote.innerHTML = settingsNote.innerHTML.replace('<ruby>データ<rt>でーた</rt></ruby>', 'データ');
     }
+
+    document.querySelectorAll('#recent .empty .jp, #all .empty .jp').forEach(el=>{
+      el.innerHTML = 'この<ruby>月<rt>つき</rt></ruby>にはまだ<ruby>取引<rt>とりひき</rt></ruby>がありません。';
+    });
+    document.querySelectorAll('#recent .empty .idn, #all .empty .idn').forEach(el=>{
+      el.textContent = 'Belum ada transaksi pada bulan ini.';
+    });
 
     refreshQuickButtons();
   }
