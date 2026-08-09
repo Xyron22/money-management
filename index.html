@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Kaigo Money</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+<header>
+  <div><h1>💴 Kaigo Money</h1><div class="sub" id="monthName"></div></div>
+  <div class="monthNav"><button class="btn outline" id="prevTop">‹</button><button class="btn outline" id="nextTop">›</button></div>
+</header>
+<main id="home">
+<section class="card hero"><div class="sub">Saldo yang masih tersedia bulan ini</div><div class="balance" id="balance">¥0</div><div class="grid3"><div class="stat"><small>Pemasukan</small><b id="income">¥0</b></div><div class="stat"><small>Pengeluaran</small><b id="expense">¥0</b></div><div class="stat"><small>Disimpan</small><b id="transfers">¥0</b></div></div></section>
+<section class="card"><div class="row"><div class="title">🎯 Target tabungan</div><button class="btn outline" id="goalBtn">Ubah</button></div><div class="row"><b id="saved">¥0</b><b id="goalPct">0%</b></div><div class="progress"><div class="fill" id="goalFill"></div></div><div class="small" id="goalText"></div></section>
+<section class="card"><div class="row"><div class="title">📦 Budget bulanan</div><button class="btn outline" id="budgetBtn">Ubah</button></div><div id="budget"></div></section>
+<section class="card"><div class="title">⚡ Tambah transaksi</div><div class="quick" id="quick"></div></section>
+<section class="card"><div class="row"><div class="title">🧾 Transaksi terbaru</div><button class="btn outline" id="allBtn">Semua</button></div><div id="recent"></div></section>
+</main>
+<main id="history" class="hidden"><section class="card"><div class="row"><div class="title">🧾 Riwayat transaksi</div><span class="small">Ketuk transaksi untuk edit/hapus</span></div><div id="all"></div></section></main>
+<main id="stats" class="hidden"><section class="card"><div class="title">📊 Statistik bulan ini</div><div id="statistics"></div></section></main>
+<main id="settings" class="hidden"><section class="card"><div class="title">⚙️ Setelan</div><p class="note">Data tersimpan di browser perangkat ini. Backup secara berkala sebelum menghapus data Safari atau mengganti perangkat.</p><div class="actions"><button class="btn dark" id="exportBtn">📤 Backup</button><button class="btn outline" id="importBtn">📥 Restore</button></div><div class="actions"><button class="btn outline" id="goalSet">🎯 Target</button><button class="btn outline" id="budgetSet">💴 Budget</button></div><div class="actions"><button class="btn red" id="resetBtn">Reset semua data</button></div></section></main>
+</div>
+<nav><button class="active" data-page="home">🏠<br>Ringkasan</button><button id="addNav">➕<br>Tambah</button><button data-page="history">🧾<br>Riwayat</button><button data-page="stats">📊<br>Statistik</button><button data-page="settings">⚙️<br>Setelan</button></nav>
+<div class="modal hidden" id="txModal"><div class="sheet"><div class="row"><b id="txModalTitle">Tambah transaksi</b><button class="btn outline" data-close="txModal">✕</button></div><form id="txForm" class="form" style="margin-top:14px"><input type="hidden" id="editId"><label>Jenis<select id="type"><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option><option value="transfer">Pindah ke simpanan</option></select></label><label>Kategori<select id="category"></select></label><label>Nominal (¥)<input id="amount" inputmode="numeric" type="number" min="1" step="1" placeholder="contoh: 5000" required></label><label>Tanggal<input id="date" type="date" required></label><label>Catatan <span class="labelhint">(opsional)</span><input id="note" maxlength="80" placeholder="contoh: belanja Lamu"></label><button class="btn dark" type="submit">Simpan</button><button class="btn red hidden" type="button" id="deleteBtn">Hapus transaksi</button></form></div></div>
+<div class="modal hidden" id="goalModal"><div class="sheet"><div class="row"><b>🎯 Target tabungan</b><button class="btn outline" data-close="goalModal">✕</button></div><form id="goalForm" class="form" style="margin-top:14px"><label>Target total (¥)<input id="goalInput" inputmode="numeric" type="number" min="0" step="1"></label><button class="btn dark" type="submit">Simpan target</button></form></div></div>
+<div class="modal hidden" id="budgetModal"><div class="sheet"><div class="row"><b>💴 Budget bulanan</b><button class="btn outline" data-close="budgetModal">✕</button></div><p class="note">Isi 0 kalau kategori tidak ingin diberi batas bulan ini.</p><form id="budgetForm" class="form"><div id="budgetInputs"></div><button class="btn dark" type="submit">Simpan budget</button></form></div></div>
+<div class="modal hidden" id="resetModal"><div class="sheet"><b>Reset semua data?</b><p class="note">Semua transaksi, budget, dan target akan dihapus dari browser ini. Tindakan ini tidak dapat dibatalkan kecuali kamu punya backup.</p><div class="actions"><button class="btn outline" data-close="resetModal">Batal</button><button class="btn red" id="confirmReset">Ya, reset</button></div></div></div>
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body></html>
