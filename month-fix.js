@@ -15,6 +15,19 @@
     return String(d.getFullYear()) + "-" + String(d.getMonth()+1).padStart(2,"0");
   }
 
+  // Migration for a truly fresh/cleared browser: don't leave it stuck on the old 2026-08 fallback.
+  const INIT_KEY = "money_management_init_v2";
+  if(!localStorage.getItem(INIT_KEY)){
+    const isBlank = db.tx.length === 0 && Number(db.goal||0) === 0 && Object.values(db.budget||{}).every(v=>Number(v||0)===0);
+    const nowMonth = currentMonthLocal();
+    if(isBlank && month === "2026-08" && nowMonth !== "2026-08"){
+      month = nowMonth;
+      db.month = nowMonth;
+      persist();
+    }
+    localStorage.setItem(INIT_KEY,"1");
+  }
+
   function polishStaticLabels(){
     const heroLabel = document.querySelector("#home .hero > .dual.light");
     if(heroLabel){
