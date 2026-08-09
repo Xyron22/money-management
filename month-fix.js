@@ -28,6 +28,24 @@
     localStorage.setItem(INIT_KEY,"1");
   }
 
+  function refreshQuickButtons(){
+    const icons={
+      "Gaji":"💰","Rokok":"🚬","Makan & Minum":"🍚","Kirim Keluarga":"👨‍👩‍👦",
+      "Shopping":"👕","Hiburan":"🎮","Tabungan":"🏦","Emergency":"🆘"
+    };
+    Object.entries(icons).forEach(([cat,icon])=>{
+      const btn=document.querySelector(`#quick [data-qcat="${cat}"]`);
+      if(btn) btn.innerHTML=`<span>${icon}</span> ${catHtml(cat)}`;
+    });
+
+    const other=document.querySelector('#quick [data-qcat=""]');
+    if(other){
+      other.dataset.qcat="Lainnya";
+      other.dataset.qtype="expense";
+      other.innerHTML=`<span>＋</span> ${catHtml("Lainnya")}`;
+    }
+  }
+
   function polishStaticLabels(){
     const heroLabel = document.querySelector("#home .hero > .dual.light");
     if(heroLabel){
@@ -81,6 +99,8 @@
     if(settingsNote){
       settingsNote.innerHTML = settingsNote.innerHTML.replace('<ruby>データ<rt>でーた</rt></ruby>', 'データ');
     }
+
+    refreshQuickButtons();
   }
 
   const baseRender = render;
