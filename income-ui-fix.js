@@ -33,7 +33,11 @@
       actualBtn.style.width = "100%";
       actualBtn.style.marginTop = "10px";
       actualBtn.innerHTML = '<span class="dual compact"><span class="jp"><ruby>実収入<rt>じつしゅうにゅう</rt></ruby>を<ruby>入力<rt>にゅうりょく</rt></ruby></span><span class="idn">Input pemasukan aktual</span></span>';
-      actualBtn.onclick = function(){ openAdd("Gaji","income"); };
+      actualBtn.onclick = function(){
+        const salaryTx = monthTx().filter(x => x.type === "income" && x.category === "Gaji");
+        if(salaryTx.length === 1) openEdit(salaryTx[0].id);
+        else openAdd("Gaji","income");
+      };
       card.appendChild(actualBtn);
     }
 
