@@ -1,53 +1,502 @@
 <!doctype html>
 <html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#111827">
-<meta name="application-name" content="MONEY MANAGEMENT By Tenka">
-<meta name="apple-mobile-web-app-title" content="MONEY MANAGEMENT By Tenka">
-<title>MONEY MANAGEMENT By Tenka</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<div class="app">
-<header>
-  <div class="brand"><h1>💴 MONEY MANAGEMENT <span class="brandBy">By Tenka</span></h1><div class="sub monthLabel" id="monthName"></div></div>
-  <div class="monthNav"><button class="btn outline" id="prevTop" aria-label="前の月">‹</button><button class="btn outline" id="nextTop" aria-label="次の月">›</button></div>
-</header>
-<main id="home">
-<section class="card hero">
-  <div class="dual light"><div class="jp"><ruby>今月<rt>こんげつ</rt></ruby>の<ruby>利用可能残高<rt>りようかのうざんだか</rt></ruby></div><div class="idn">Saldo yang masih tersedia bulan ini</div></div>
-  <div class="balance" id="balance">¥0</div>
-  <div class="grid3">
-    <div class="stat"><small><span class="dual compact"><span class="jp"><ruby>収入<rt>しゅうにゅう</rt></ruby></span><span class="idn">Pemasukan</span></span></small><b id="income">¥0</b></div>
-    <div class="stat"><small><span class="dual compact"><span class="jp"><ruby>支出<rt>ししゅつ</rt></ruby></span><span class="idn">Pengeluaran</span></span></small><b id="expense">¥0</b></div>
-    <div class="stat"><small><span class="dual compact"><span class="jp"><ruby>貯蓄<rt>ちょちく</rt></ruby></span><span class="idn">Disimpan</span></span></small><b id="transfers">¥0</b></div>
-  </div>
-</section>
-<section class="card"><div class="row"><div class="title">🎯 <span class="dual inline"><span class="jp"><ruby>貯金目標<rt>ちょきんもくひょう</rt></ruby></span><span class="idn">Target tabungan</span></span></div><button class="btn outline" id="goalBtn"><span class="dual compact"><span class="jp"><ruby>変更<rt>へんこう</rt></ruby></span><span class="idn">Ubah</span></span></button></div><div class="row"><b id="saved">¥0</b><b id="goalPct">0%</b></div><div class="progress"><div class="fill" id="goalFill"></div></div><div class="small" id="goalText"></div></section>
-<section class="card"><div class="row"><div class="title">📦 <span class="dual inline"><span class="jp"><ruby>月間予算<rt>げっかんよさん</rt></ruby></span><span class="idn">Budget bulanan</span></span></div><button class="btn outline" id="budgetBtn"><span class="dual compact"><span class="jp"><ruby>変更<rt>へんこう</rt></ruby></span><span class="idn">Ubah</span></span></button></div><div id="budget"></div></section>
-<section class="card"><div class="title">⚡ <span class="dual inline"><span class="jp"><ruby>取引<rt>とりひき</rt></ruby>を<ruby>追加<rt>ついか</rt></ruby></span><span class="idn">Tambah transaksi</span></span></div><div class="quick" id="quick"></div></section>
-<section class="card"><div class="row"><div class="title">🧾 <span class="dual inline"><span class="jp"><ruby>最近<rt>さいきん</rt></ruby>の<ruby>取引<rt>とりひき</rt></ruby></span><span class="idn">Transaksi terbaru</span></span></div><button class="btn outline" id="allBtn"><span class="dual compact"><span class="jp"><ruby>全件<rt>ぜんけん</rt></ruby></span><span class="idn">Semua</span></span></button></div><div id="recent"></div></section>
-</main>
-<main id="history" class="hidden"><section class="card"><div class="row"><div class="title">🧾 <span class="dual inline"><span class="jp"><ruby>取引履歴<rt>とりひきりれき</rt></ruby></span><span class="idn">Riwayat transaksi</span></span></div><span class="small"><span class="dual compact"><span class="jp"><ruby>取引<rt>とりひき</rt></ruby>をタップして<ruby>編集<rt>へんしゅう</rt></ruby>・<ruby>削除<rt>さくじょ</rt></ruby></span><span class="idn">Ketuk transaksi untuk edit/hapus</span></span></span></div><div id="all"></div></section></main>
-<main id="stats" class="hidden"><section class="card"><div class="title">📊 <span class="dual inline"><span class="jp"><ruby>今月<rt>こんげつ</rt></ruby>の<ruby>統計<rt>とうけい</rt></ruby></span><span class="idn">Statistik bulan ini</span></span></div><div id="statistics"></div></section></main>
-<main id="settings" class="hidden"><section class="card"><div class="title">⚙️ <span class="dual inline"><span class="jp"><ruby>設定<rt>せってい</rt></ruby></span><span class="idn">Setelan</span></span></div><p class="note"><span class="dual"><span class="jp"><ruby>データ<rt>でーた</rt></ruby>はこの<ruby>端末<rt>たんまつ</rt></ruby>のブラウザに<ruby>保存<rt>ほぞん</rt></ruby>されます。Safariのデータ<ruby>削除<rt>さくじょ</rt></ruby>や<ruby>機種変更<rt>きしゅへんこう</rt></ruby>の<ruby>前<rt>まえ</rt></ruby>にバックアップしてください。</span><span class="idn">Data tersimpan di browser perangkat ini. Backup secara berkala sebelum menghapus data Safari atau mengganti perangkat.</span></span></p><div class="actions"><button class="btn dark" id="exportBtn">📤 <span class="dual compact"><span class="jp">バックアップ</span><span class="idn">Backup</span></span></button><button class="btn outline" id="importBtn">📥 <span class="dual compact"><span class="jp"><ruby>復元<rt>ふくげん</rt></ruby></span><span class="idn">Restore</span></span></button></div><div class="actions"><button class="btn outline" id="goalSet">🎯 <span class="dual compact"><span class="jp"><ruby>目標<rt>もくひょう</rt></ruby></span><span class="idn">Target</span></span></button><button class="btn outline" id="budgetSet">💴 <span class="dual compact"><span class="jp"><ruby>予算<rt>よさん</rt></ruby></span><span class="idn">Budget</span></span></button></div><div class="actions"><button class="btn red" id="resetBtn"><span class="dual compact"><span class="jp">すべてのデータをリセット</span><span class="idn">Reset semua data</span></span></button></div></section></main>
-</div>
-<nav>
-<button class="active" data-page="home">🏠<br><span class="dual navdual"><span class="jp"><ruby>概要<rt>がいよう</rt></ruby></span><span class="idn">Ringkasan</span></span></button>
-<button id="addNav">➕<br><span class="dual navdual"><span class="jp"><ruby>追加<rt>ついか</rt></ruby></span><span class="idn">Tambah</span></span></button>
-<button data-page="history">🧾<br><span class="dual navdual"><span class="jp"><ruby>履歴<rt>りれき</rt></ruby></span><span class="idn">Riwayat</span></span></button>
-<button data-page="stats">📊<br><span class="dual navdual"><span class="jp"><ruby>統計<rt>とうけい</rt></ruby></span><span class="idn">Statistik</span></span></button>
-<button data-page="settings">⚙️<br><span class="dual navdual"><span class="jp"><ruby>設定<rt>せってい</rt></ruby></span><span class="idn">Setelan</span></span></button>
-</nav>
-<div class="modal hidden" id="txModal"><div class="sheet"><div class="row"><b id="txModalTitle"></b><button class="btn outline" data-close="txModal">✕</button></div><form id="txForm" class="form" style="margin-top:14px"><input type="hidden" id="editId"><label><span class="dual formdual"><span class="jp"><ruby>種類<rt>しゅるい</rt></ruby></span><span class="idn">Jenis</span></span><select id="type"><option value="income">収入（しゅうにゅう）— Pemasukan</option><option value="expense">支出（ししゅつ）— Pengeluaran</option><option value="transfer">貯蓄へ移動（ちょちくへいどう）— Pindah ke simpanan</option></select></label><label><span class="dual formdual"><span class="jp"><ruby>カテゴリー<rt>かてごりー</rt></ruby></span><span class="idn">Kategori</span></span><select id="category"></select></label><label><span class="dual formdual"><span class="jp"><ruby>金額<rt>きんがく</rt></ruby> (¥)</span><span class="idn">Nominal (¥)</span></span><input id="amount" inputmode="numeric" type="number" min="1" step="1" placeholder="例：5000" required></label><label><span class="dual formdual"><span class="jp"><ruby>日付<rt>ひづけ</rt></ruby></span><span class="idn">Tanggal</span></span><input id="date" type="date" required></label><label><span class="dual formdual"><span class="jp"><ruby>メモ<rt>めも</rt></ruby></span><span class="idn">Catatan (opsional)</span></span><input id="note" maxlength="80" placeholder="例：Lamuで買い物 / belanja Lamu"></label><button class="btn dark" type="submit"><span class="dual compact"><span class="jp"><ruby>保存<rt>ほぞん</rt></ruby></span><span class="idn">Simpan</span></span></button><button class="btn red hidden" type="button" id="deleteBtn"><span class="dual compact"><span class="jp"><ruby>取引<rt>とりひき</rt></ruby>を<ruby>削除<rt>さくじょ</rt></ruby></span><span class="idn">Hapus transaksi</span></span></button></form></div></div>
-<div class="modal hidden" id="goalModal"><div class="sheet"><div class="row"><b>🎯 <span class="dual inline"><span class="jp"><ruby>貯金目標<rt>ちょきんもくひょう</rt></ruby></span><span class="idn">Target tabungan</span></span></b><button class="btn outline" data-close="goalModal">✕</button></div><form id="goalForm" class="form" style="margin-top:14px"><label><span class="dual formdual"><span class="jp"><ruby>合計目標<rt>ごうけいもくひょう</rt></ruby> (¥)</span><span class="idn">Target total (¥)</span></span><input id="goalInput" inputmode="numeric" type="number" min="0" step="1"></label><button class="btn dark" type="submit"><span class="dual compact"><span class="jp"><ruby>目標<rt>もくひょう</rt></ruby>を<ruby>保存<rt>ほぞん</rt></ruby></span><span class="idn">Simpan target</span></span></button></form></div></div>
-<div class="modal hidden" id="budgetModal"><div class="sheet"><div class="row"><b>💴 <span class="dual inline"><span class="jp"><ruby>月間予算<rt>げっかんよさん</rt></ruby></span><span class="idn">Budget bulanan</span></span></b><button class="btn outline" data-close="budgetModal">✕</button></div><p class="note"><span class="dual"><span class="jp"><ruby>上限<rt>じょうげん</rt></ruby>を<ruby>設定<rt>せってい</rt></ruby>しないカテゴリーは0にしてください。</span><span class="idn">Isi 0 kalau kategori tidak ingin diberi batas bulan ini.</span></span></p><form id="budgetForm" class="form"><div id="budgetInputs"></div><button class="btn dark" type="submit"><span class="dual compact"><span class="jp"><ruby>予算<rt>よさん</rt></ruby>を<ruby>保存<rt>ほぞん</rt></ruby></span><span class="idn">Simpan budget</span></span></button></form></div></div>
-<div class="modal hidden" id="resetModal"><div class="sheet"><b><span class="dual"><span class="jp">すべてのデータをリセットしますか？</span><span class="idn">Reset semua data?</span></span></b><p class="note"><span class="dual"><span class="jp">すべての<ruby>取引<rt>とりひき</rt></ruby>、<ruby>予算<rt>よさん</rt></ruby>、<ruby>目標<rt>もくひょう</rt></ruby>がこのブラウザから<ruby>削除<rt>さくじょ</rt></ruby>されます。バックアップがない<ruby>場合<rt>ばあい</rt></ruby>は<ruby>元<rt>もと</rt></ruby>に<ruby>戻<rt>もど</rt></ruby>せません。</span><span class="idn">Semua transaksi, budget, dan target akan dihapus dari browser ini. Tindakan ini tidak dapat dibatalkan kecuali kamu punya backup.</span></span></p><div class="actions"><button class="btn outline" data-close="resetModal"><span class="dual compact"><span class="jp">キャンセル</span><span class="idn">Batal</span></span></button><button class="btn red" id="confirmReset"><span class="dual compact"><span class="jp">はい、リセット</span><span class="idn">Ya, reset</span></span></button></div></div></div>
-<div class="toast" id="toast"></div>
-<script src="app.js"></script>
-<script src="month-fix.js"></script>
-<script src="income-ui-fix.js"></script>
-<script src="fixed-costs.js"></script>
-</body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#111827" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="application-name" content="MONEY MANAGEMENT By Tenka" />
+    <meta
+      name="apple-mobile-web-app-title"
+      content="MONEY MANAGEMENT By Tenka"
+    />
+    <title>MONEY MANAGEMENT By Tenka</title>
+    <link rel="stylesheet" href="style.css?v=2.0.0" />
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <div class="brand">
+          <h1>💴 MONEY MANAGEMENT <span class="brandBy">By Tenka</span></h1>
+          <div class="sub monthLabel" id="monthName"></div>
+        </div>
+        <div class="monthNav">
+          <button
+            type="button"
+            class="btn outline"
+            id="prevTop"
+            aria-label="前の月"
+          >
+            ‹</button
+          ><button
+            type="button"
+            class="btn outline"
+            id="nextTop"
+            aria-label="次の月"
+          >
+            ›
+          </button>
+        </div>
+      </header>
+      <section id="home" class="page">
+        <section class="card hero">
+          <div class="dual light">
+            <div class="jp">
+              <ruby>今月<rt>こんげつ</rt></ruby
+              >の<ruby>利用可能残高<rt>りようかのうざんだか</rt></ruby>
+            </div>
+            <div class="idn">Saldo yang masih tersedia bulan ini</div>
+          </div>
+          <div class="balance" id="balance">¥0</div>
+          <div class="grid3">
+            <div class="stat">
+              <small
+                ><span class="dual compact"
+                  ><span class="jp"
+                    ><ruby>収入<rt>しゅうにゅう</rt></ruby></span
+                  ><span class="idn">Pemasukan</span></span
+                ></small
+              ><b id="income">¥0</b>
+            </div>
+            <div class="stat">
+              <small
+                ><span class="dual compact"
+                  ><span class="jp"
+                    ><ruby>支出<rt>ししゅつ</rt></ruby></span
+                  ><span class="idn">Pengeluaran</span></span
+                ></small
+              ><b id="expense">¥0</b>
+            </div>
+            <div class="stat">
+              <small
+                ><span class="dual compact"
+                  ><span class="jp"
+                    ><ruby>貯蓄<rt>ちょちく</rt></ruby></span
+                  ><span class="idn">Disimpan</span></span
+                ></small
+              ><b id="transfers">¥0</b>
+            </div>
+          </div>
+        </section>
+        <section class="card">
+          <div class="row">
+            <div class="title">
+              🎯
+              <span class="dual inline"
+                ><span class="jp"
+                  ><ruby>貯金目標<rt>ちょきんもくひょう</rt></ruby></span
+                ><span class="idn">Target tabungan</span></span
+              >
+            </div>
+            <button type="button" class="btn outline" id="goalBtn">
+              <span class="dual compact"
+                ><span class="jp"
+                  ><ruby>変更<rt>へんこう</rt></ruby></span
+                ><span class="idn">Ubah</span></span
+              >
+            </button>
+          </div>
+          <div class="row"><b id="saved">¥0</b><b id="goalPct">0%</b></div>
+          <div class="progress"><div class="fill" id="goalFill"></div></div>
+          <div class="small" id="goalText"></div>
+        </section>
+        <section class="card">
+          <div class="row">
+            <div class="title">
+              📦
+              <span class="dual inline"
+                ><span class="jp"
+                  ><ruby>月間予算<rt>げっかんよさん</rt></ruby></span
+                ><span class="idn">Budget bulanan</span></span
+              >
+            </div>
+            <button type="button" class="btn outline" id="budgetBtn">
+              <span class="dual compact"
+                ><span class="jp"
+                  ><ruby>変更<rt>へんこう</rt></ruby></span
+                ><span class="idn">Ubah</span></span
+              >
+            </button>
+          </div>
+          <div id="budget"></div>
+        </section>
+        <section class="card">
+          <div class="title">
+            ⚡
+            <span class="dual inline"
+              ><span class="jp"
+                ><ruby>取引<rt>とりひき</rt></ruby
+                >を<ruby>追加<rt>ついか</rt></ruby></span
+              ><span class="idn">Tambah transaksi</span></span
+            >
+          </div>
+          <div class="quick" id="quick"></div>
+        </section>
+        <section class="card">
+          <div class="row">
+            <div class="title">
+              🧾
+              <span class="dual inline"
+                ><span class="jp"
+                  ><ruby>最近<rt>さいきん</rt></ruby
+                  >の<ruby>取引<rt>とりひき</rt></ruby></span
+                ><span class="idn">Transaksi terbaru</span></span
+              >
+            </div>
+            <button type="button" class="btn outline" id="allBtn">
+              <span class="dual compact"
+                ><span class="jp"
+                  ><ruby>全件<rt>ぜんけん</rt></ruby></span
+                ><span class="idn">Semua</span></span
+              >
+            </button>
+          </div>
+          <div id="recent"></div>
+        </section>
+      </section>
+      <section id="history" class="page hidden">
+        <section class="card">
+          <div class="row">
+            <div class="title">
+              🧾
+              <span class="dual inline"
+                ><span class="jp"
+                  ><ruby>取引履歴<rt>とりひきりれき</rt></ruby></span
+                ><span class="idn">Riwayat transaksi</span></span
+              >
+            </div>
+            <span class="small"
+              ><span class="dual compact"
+                ><span class="jp"
+                  ><ruby>取引<rt>とりひき</rt></ruby
+                  >をタップして<ruby>編集<rt>へんしゅう</rt></ruby
+                  >・<ruby>削除<rt>さくじょ</rt></ruby></span
+                ><span class="idn">Ketuk transaksi untuk edit/hapus</span></span
+              ></span
+            >
+          </div>
+          <div id="all"></div>
+        </section>
+      </section>
+      <section id="stats" class="page hidden">
+        <section class="card">
+          <div class="title">
+            📊
+            <span class="dual inline"
+              ><span class="jp"
+                ><ruby>今月<rt>こんげつ</rt></ruby
+                >の<ruby>統計<rt>とうけい</rt></ruby></span
+              ><span class="idn">Statistik bulan ini</span></span
+            >
+          </div>
+          <div id="statistics"></div>
+        </section>
+      </section>
+      <section id="settings" class="page hidden">
+        <section class="card">
+          <div class="title">
+            ⚙️
+            <span class="dual inline"
+              ><span class="jp"
+                ><ruby>設定<rt>せってい</rt></ruby></span
+              ><span class="idn">Setelan</span></span
+            >
+          </div>
+          <p class="note">
+            <span class="dual"
+              ><span class="jp"
+                ><ruby>データ<rt>でーた</rt></ruby
+                >はこの<ruby>端末<rt>たんまつ</rt></ruby
+                >のブラウザに<ruby>保存<rt>ほぞん</rt></ruby
+                >されます。Safariのデータ<ruby>削除<rt>さくじょ</rt></ruby
+                >や<ruby>機種変更<rt>きしゅへんこう</rt></ruby
+                >の<ruby>前<rt>まえ</rt></ruby
+                >にバックアップしてください。</span
+              ><span class="idn"
+                >Data tersimpan di browser perangkat ini. Backup secara berkala
+                sebelum menghapus data Safari atau mengganti perangkat.</span
+              ></span
+            >
+          </p>
+          <div class="actions">
+            <button type="button" class="btn dark" id="exportBtn">
+              📤
+              <span class="dual compact"
+                ><span class="jp">バックアップ</span
+                ><span class="idn">Backup</span></span
+              ></button
+            ><button type="button" class="btn outline" id="importBtn">
+              📥
+              <span class="dual compact"
+                ><span class="jp"
+                  ><ruby>復元<rt>ふくげん</rt></ruby></span
+                ><span class="idn">Restore</span></span
+              >
+            </button>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn outline" id="goalSet">
+              🎯
+              <span class="dual compact"
+                ><span class="jp"
+                  ><ruby>目標<rt>もくひょう</rt></ruby></span
+                ><span class="idn">Target</span></span
+              ></button
+            ><button type="button" class="btn outline" id="budgetSet">
+              💴
+              <span class="dual compact"
+                ><span class="jp"
+                  ><ruby>予算<rt>よさん</rt></ruby></span
+                ><span class="idn">Budget</span></span
+              >
+            </button>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn red" id="resetBtn">
+              <span class="dual compact"
+                ><span class="jp">すべてのデータをリセット</span
+                ><span class="idn">Reset semua data</span></span
+              >
+            </button>
+          </div>
+        </section>
+      </section>
+    </div>
+    <nav>
+      <button type="button" class="active" data-page="home">
+        🏠<br /><span class="dual navdual"
+          ><span class="jp"
+            ><ruby>概要<rt>がいよう</rt></ruby></span
+          ><span class="idn">Ringkasan</span></span
+        >
+      </button>
+      <button type="button" id="addNav">
+        ➕<br /><span class="dual navdual"
+          ><span class="jp"
+            ><ruby>追加<rt>ついか</rt></ruby></span
+          ><span class="idn">Tambah</span></span
+        >
+      </button>
+      <button type="button" data-page="history">
+        🧾<br /><span class="dual navdual"
+          ><span class="jp"
+            ><ruby>履歴<rt>りれき</rt></ruby></span
+          ><span class="idn">Riwayat</span></span
+        >
+      </button>
+      <button type="button" data-page="stats">
+        📊<br /><span class="dual navdual"
+          ><span class="jp"
+            ><ruby>統計<rt>とうけい</rt></ruby></span
+          ><span class="idn">Statistik</span></span
+        >
+      </button>
+      <button type="button" data-page="settings">
+        ⚙️<br /><span class="dual navdual"
+          ><span class="jp"
+            ><ruby>設定<rt>せってい</rt></ruby></span
+          ><span class="idn">Setelan</span></span
+        >
+      </button>
+    </nav>
+    <div class="modal hidden" id="txModal">
+      <div class="sheet">
+        <div class="row">
+          <b id="txModalTitle"></b
+          ><button type="button" class="btn outline" data-close="txModal">
+            ✕
+          </button>
+        </div>
+        <form id="txForm" class="form modalForm">
+          <input type="hidden" id="editId" /><label
+            ><span class="dual formdual"
+              ><span class="jp"
+                ><ruby>種類<rt>しゅるい</rt></ruby></span
+              ><span class="idn">Jenis</span></span
+            ><select id="type">
+              <option value="income">収入（しゅうにゅう）— Pemasukan</option>
+              <option value="expense">支出（ししゅつ）— Pengeluaran</option>
+              <option value="transfer">
+                貯蓄へ移動（ちょちくへいどう）— Pindah ke simpanan
+              </option>
+            </select></label
+          ><label
+            ><span class="dual formdual"
+              ><span class="jp"
+                ><ruby>カテゴリー<rt>かてごりー</rt></ruby></span
+              ><span class="idn">Kategori</span></span
+            ><select id="category"></select></label
+          ><label
+            ><span class="dual formdual"
+              ><span class="jp"
+                ><ruby>金額<rt>きんがく</rt></ruby> (¥)</span
+              ><span class="idn">Nominal (¥)</span></span
+            ><input
+              id="amount"
+              inputmode="numeric"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="例：5000"
+              required /></label
+          ><label
+            ><span class="dual formdual"
+              ><span class="jp"
+                ><ruby>日付<rt>ひづけ</rt></ruby></span
+              ><span class="idn">Tanggal</span></span
+            ><input id="date" type="date" required /></label
+          ><label
+            ><span class="dual formdual"
+              ><span class="jp"
+                ><ruby>メモ<rt>めも</rt></ruby></span
+              ><span class="idn">Catatan (opsional)</span></span
+            ><input
+              type="text"
+              id="note"
+              maxlength="80"
+              placeholder="例：Lamuで買い物 / belanja Lamu" /></label
+          ><button class="btn dark" type="submit">
+            <span class="dual compact"
+              ><span class="jp"
+                ><ruby>保存<rt>ほぞん</rt></ruby></span
+              ><span class="idn">Simpan</span></span
+            ></button
+          ><button class="btn red hidden" type="button" id="deleteBtn">
+            <span class="dual compact"
+              ><span class="jp"
+                ><ruby>取引<rt>とりひき</rt></ruby
+                >を<ruby>削除<rt>さくじょ</rt></ruby></span
+              ><span class="idn">Hapus transaksi</span></span
+            >
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="modal hidden" id="goalModal">
+      <div class="sheet">
+        <div class="row">
+          <b
+            >🎯
+            <span class="dual inline"
+              ><span class="jp"
+                ><ruby>貯金目標<rt>ちょきんもくひょう</rt></ruby></span
+              ><span class="idn">Target tabungan</span></span
+            ></b
+          ><button type="button" class="btn outline" data-close="goalModal">
+            ✕
+          </button>
+        </div>
+        <form id="goalForm" class="form modalForm">
+          <label
+            ><span class="dual formdual"
+              ><span class="jp"
+                ><ruby>合計目標<rt>ごうけいもくひょう</rt></ruby> (¥)</span
+              ><span class="idn">Target total (¥)</span></span
+            ><input
+              id="goalInput"
+              inputmode="numeric"
+              type="number"
+              min="0"
+              step="1" /></label
+          ><button class="btn dark" type="submit">
+            <span class="dual compact"
+              ><span class="jp"
+                ><ruby>目標<rt>もくひょう</rt></ruby
+                >を<ruby>保存<rt>ほぞん</rt></ruby></span
+              ><span class="idn">Simpan target</span></span
+            >
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="modal hidden" id="budgetModal">
+      <div class="sheet">
+        <div class="row">
+          <b
+            >💴
+            <span class="dual inline"
+              ><span class="jp"
+                ><ruby>月間予算<rt>げっかんよさん</rt></ruby></span
+              ><span class="idn">Budget bulanan</span></span
+            ></b
+          ><button type="button" class="btn outline" data-close="budgetModal">
+            ✕
+          </button>
+        </div>
+        <p class="note">
+          <span class="dual"
+            ><span class="jp"
+              ><ruby>上限<rt>じょうげん</rt></ruby
+              >を<ruby>設定<rt>せってい</rt></ruby
+              >しないカテゴリーは0にしてください。</span
+            ><span class="idn"
+              >Isi 0 kalau kategori tidak ingin diberi batas bulan ini.</span
+            ></span
+          >
+        </p>
+        <form id="budgetForm" class="form">
+          <div id="budgetInputs"></div>
+          <button class="btn dark" type="submit">
+            <span class="dual compact"
+              ><span class="jp"
+                ><ruby>予算<rt>よさん</rt></ruby
+                >を<ruby>保存<rt>ほぞん</rt></ruby></span
+              ><span class="idn">Simpan budget</span></span
+            >
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="modal hidden" id="resetModal">
+      <div class="sheet">
+        <b
+          ><span class="dual"
+            ><span class="jp">すべてのデータをリセットしますか？</span
+            ><span class="idn">Reset semua data?</span></span
+          ></b
+        >
+        <p class="note">
+          <span class="dual"
+            ><span class="jp"
+              >すべての<ruby>取引<rt>とりひき</rt></ruby
+              >、<ruby>予算<rt>よさん</rt></ruby
+              >、<ruby>目標<rt>もくひょう</rt></ruby
+              >がこのブラウザから<ruby>削除<rt>さくじょ</rt></ruby
+              >されます。バックアップがない<ruby>場合<rt>ばあい</rt></ruby
+              >は<ruby>元<rt>もと</rt></ruby
+              >に<ruby>戻<rt>もど</rt></ruby
+              >せません。</span
+            ><span class="idn"
+              >Semua transaksi, budget, dan target akan dihapus dari browser
+              ini. Tindakan ini tidak dapat dibatalkan kecuali kamu punya
+              backup.</span
+            ></span
+          >
+        </p>
+        <div class="actions">
+          <button type="button" class="btn outline" data-close="resetModal">
+            <span class="dual compact"
+              ><span class="jp">キャンセル</span
+              ><span class="idn">Batal</span></span
+            ></button
+          ><button type="button" class="btn red" id="confirmReset">
+            <span class="dual compact"
+              ><span class="jp">はい、リセット</span
+              ><span class="idn">Ya, reset</span></span
+            >
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="toast" id="toast"></div>
+    <script src="app-v2.js?v=2.0.0"></script>
+  </body>
+</html>
