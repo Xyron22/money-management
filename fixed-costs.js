@@ -3,6 +3,7 @@
   const FIXED_KEY="money_management_fixed_costs_v1";
   const BASELINE_KEY="money_management_baseline_income_v1";
   const currentYM=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")};
+  const todayLocal=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
   const loadFixed=()=>{try{const x=JSON.parse(localStorage.getItem(FIXED_KEY)||"[]");return Array.isArray(x)?x:[]}catch(_){return []}};
   const saveFixed=x=>localStorage.setItem(FIXED_KEY,JSON.stringify(x));
   const makeId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -17,11 +18,20 @@
 
   function ensureMonthlyFixed(){
     const costs=loadFixed();
+    const today=todayLocal();
     let changed=false;
     costs.filter(x=>x.active!==false && (!x.startMonth||month>=x.startMonth)).forEach(x=>{
       const id="fixed:"+x.id+":"+month;
-      const existing=db.tx.find(t=>String(t.id)===id);
       const chargeDate=billingDate(month,x.day);
+      const existing=db.tx.find(t=>String(t.id)===id);
+      const isDue=chargeDate<=today;
+      if(!isDue){
+        if(existing && existing.fixedCostId===x.id){
+          db.tx=db.tx.filter(t=>String(t.id)!==id);
+          changed=true;
+        }
+        return;
+      }
       const wanted={category:x.category||"Langganan",amount:Number(x.amount)||0,date:chargeDate,note:x.name+" • 固定費の自動登録 / Biaya rutin otomatis • "+idDate(chargeDate)};
       if(!existing){
         db.tx.push({id:id,type:"expense",category:wanted.category,amount:wanted.amount,date:wanted.date,note:wanted.note,created:new Date(wanted.date+"T12:00:00").getTime(),fixedCostId:x.id});
@@ -70,7 +80,7 @@
     ensureUI();
     const costs=loadFixed(),active=costs.filter(x=>x.active!==false),total=active.reduce((a,x)=>a+(Number(x.amount)||0),0);
     const s=document.getElementById("fixedSummary");
-    s.innerHTML=active.length?'<div class="row"><span class="small">'+active.length+' layanan aktif・自動登録 ON</span><b>'+yen(total)+' / 月</b></div><div class="fixedRows">'+active.map(x=>{const d=billingDate(month,x.day),exists=db.tx.some(t=>String(t.id)==="fixed:"+x.id+":"+month);return '<div class="fixedRow"><div><b>'+esc(x.name)+'</b><small>'+jpDate(d)+'<br>'+idDate(d)+'</small></div><div class="fixedRight"><b>'+yen(x.amount)+'</b><span class="autoBadge">'+(exists?'✓ 自動登録済み':'自動登録 ON')+'</span><small>'+(exists?'Tercatat otomatis':'Otomatis aktif')+'</small></div></div>'}).join("")+'</div><p class="fixedHelp">Setelah disimpan sekali, pencatatan berjalan otomatis setiap bulan sampai dinonaktifkan.</p>':'<div class="empty"><span class="dual"><span class="jp"><ruby>固定費<rt>こていひ</rt></ruby>はまだありません。</span><span class="idn">Belum ada biaya rutin.</span></span></div>';
+    s.innerHTML=active.length?'<div class="row"><span class="small">'+active.length+' layanan aktif・自動登録 ON</span><b>'+yen(total)+' / 月</b></div><div class="fixedRows">'+active.map(x=>{const d=billingDate(month,x.day),exists=db.tx.some(t=>String(t.id)==="fixed:"+x.id+":"+month),due=d<=todayLocal();return '<div class="fixedRow"><div><b>'+esc(x.name)+'</b><small>'+jpDate(d)+'<br>'+idDate(d)+'</small></div><div class="fixedRight"><b>'+yen(x.amount)+'</b><span class="autoBadge '+(exists?'':'pending')+'">'+(exists?'✓ 自動登録済み':'予定')+'</span><small>'+(exists?'Tercatat otomatis':'Belum dipotong')+'</small></div></div>'}).join("")+'</div><p class="fixedHelp">Belum mengurangi saldo sebelum tanggal tagihan. Pada/selepas tanggalnya, transaksi dicatat otomatis saat aplikasi dibuka.</p>':'<div class="empty"><span class="dual"><span class="jp"><ruby>固定費<rt>こていひ</rt></ruby>はまだありません。</span><span class="idn">Belum ada biaya rutin.</span></span></div>';
   }
   function openManager(){
     const list=document.getElementById("fixedList"),costs=loadFixed();
@@ -122,7 +132,7 @@
   const oldReset=document.getElementById("confirmReset").onclick;
   document.getElementById("confirmReset").onclick=function(){localStorage.removeItem(FIXED_KEY);oldReset();render()};
   const style=document.createElement("style");
-  style.textContent=".fixedRows{margin-top:8px}.fixedRow{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-top:1px solid #eee}.fixedRow>div{display:flex;flex-direction:column;gap:3px}.fixedRow small{font-size:10px;color:var(--muted);line-height:1.35}.fixedRight{align-items:flex-end;text-align:right}.autoBadge{font-size:9px;font-weight:800;color:var(--green);background:#dcfce7;padding:3px 6px;border-radius:99px}.fixedHelp{font-size:10px;color:var(--muted);margin:7px 0 0;line-height:1.4}.fixedItem{width:100%;display:flex;align-items:center;justify-content:space-between;border:0;border-bottom:1px solid #eee;background:#fff;padding:12px 2px;text-align:left;color:var(--text)}.fixedItem span:first-child{display:flex;flex-direction:column;gap:3px}.fixedItem small{color:var(--muted)}.fixedItem.off{opacity:.55}.fixedCheck{display:flex;align-items:center;gap:10px}.fixedCheck input{width:22px;height:22px;margin:0}";
+  style.textContent=".fixedRows{margin-top:8px}.fixedRow{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-top:1px solid #eee}.fixedRow>div{display:flex;flex-direction:column;gap:3px}.fixedRow small{font-size:10px;color:var(--muted);line-height:1.35}.fixedRight{align-items:flex-end;text-align:right}.autoBadge{font-size:9px;font-weight:800;color:var(--green);background:#dcfce7;padding:3px 6px;border-radius:99px}.autoBadge.pending{color:var(--amber);background:#fef3c7}.fixedHelp{font-size:10px;color:var(--muted);margin:7px 0 0;line-height:1.4}.fixedItem{width:100%;display:flex;align-items:center;justify-content:space-between;border:0;border-bottom:1px solid #eee;background:#fff;padding:12px 2px;text-align:left;color:var(--text)}.fixedItem span:first-child{display:flex;flex-direction:column;gap:3px}.fixedItem small{color:var(--muted)}.fixedItem.off{opacity:.55}.fixedCheck{display:flex;align-items:center;gap:10px}.fixedCheck input{width:22px;height:22px;margin:0}";
   document.head.appendChild(style);
   ensureUI();render();
 })();
