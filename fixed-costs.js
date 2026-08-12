@@ -7,6 +7,8 @@
   const saveFixed=x=>localStorage.setItem(FIXED_KEY,JSON.stringify(x));
   const makeId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
   const billingDate=(ym,day)=>{const p=ym.split("-").map(Number),last=new Date(p[0],p[1],0).getDate();return ym+"-"+String(Math.min(Math.max(1,Number(day)||1),last)).padStart(2,"0")};
+  const idDate=date=>{const p=String(date).split("-").map(Number);return new Date(p[0],p[1]-1,p[2]).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"})};
+  const jpDate=date=>{const p=String(date).split("-").map(Number);return p[0]+"年"+p[1]+"月"+p[2]+"日"};
 
   if(!CATEGORY_MAP.expense.includes("Langganan")) CATEGORY_MAP.expense.push("Langganan");
   if(!BUDGET_CATS.includes("Langganan")) BUDGET_CATS.push("Langganan");
@@ -19,7 +21,8 @@
     costs.filter(x=>x.active!==false && (!x.startMonth||month>=x.startMonth)).forEach(x=>{
       const id="fixed:"+x.id+":"+month;
       const existing=db.tx.find(t=>String(t.id)===id);
-      const wanted={category:x.category||"Langganan",amount:Number(x.amount)||0,date:billingDate(month,x.day),note:x.name+" / 自動登録・biaya rutin"};
+      const chargeDate=billingDate(month,x.day);
+      const wanted={category:x.category||"Langganan",amount:Number(x.amount)||0,date:chargeDate,note:x.name+" • 固定費の自動登録 / Biaya rutin otomatis • "+idDate(chargeDate)};
       if(!existing){
         db.tx.push({id:id,type:"expense",category:wanted.category,amount:wanted.amount,date:wanted.date,note:wanted.note,created:new Date(wanted.date+"T12:00:00").getTime(),fixedCostId:x.id});
         changed=true;
@@ -67,7 +70,7 @@
     ensureUI();
     const costs=loadFixed(),active=costs.filter(x=>x.active!==false),total=active.reduce((a,x)=>a+(Number(x.amount)||0),0);
     const s=document.getElementById("fixedSummary");
-    s.innerHTML=active.length?'<div class="row"><span class="small">'+active.length+' layanan aktif</span><b>'+yen(total)+' / 月</b></div><div class="fixedChips">'+active.map(x=>'<span class="fixedChip">'+esc(x.name)+' '+yen(x.amount)+'</span>').join("")+'</div>':'<div class="empty"><span class="dual"><span class="jp"><ruby>固定費<rt>こていひ</rt></ruby>はまだありません。</span><span class="idn">Belum ada biaya rutin.</span></span></div>';
+    s.innerHTML=active.length?'<div class="row"><span class="small">'+active.length+' layanan aktif・自動登録 ON</span><b>'+yen(total)+' / 月</b></div><div class="fixedRows">'+active.map(x=>{const d=billingDate(month,x.day),exists=db.tx.some(t=>String(t.id)==="fixed:"+x.id+":"+month);return '<div class="fixedRow"><div><b>'+esc(x.name)+'</b><small>'+jpDate(d)+'<br>'+idDate(d)+'</small></div><div class="fixedRight"><b>'+yen(x.amount)+'</b><span class="autoBadge">'+(exists?'✓ 自動登録済み':'自動登録 ON')+'</span><small>'+(exists?'Tercatat otomatis':'Otomatis aktif')+'</small></div></div>'}).join("")+'</div><p class="fixedHelp">Setelah disimpan sekali, pencatatan berjalan otomatis setiap bulan sampai dinonaktifkan.</p>':'<div class="empty"><span class="dual"><span class="jp"><ruby>固定費<rt>こていひ</rt></ruby>はまだありません。</span><span class="idn">Belum ada biaya rutin.</span></span></div>';
   }
   function openManager(){
     const list=document.getElementById("fixedList"),costs=loadFixed();
@@ -119,7 +122,7 @@
   const oldReset=document.getElementById("confirmReset").onclick;
   document.getElementById("confirmReset").onclick=function(){localStorage.removeItem(FIXED_KEY);oldReset();render()};
   const style=document.createElement("style");
-  style.textContent=".fixedChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.fixedChip{background:#f3f4f6;border-radius:99px;padding:5px 8px;font-size:10px}.fixedItem{width:100%;display:flex;align-items:center;justify-content:space-between;border:0;border-bottom:1px solid #eee;background:#fff;padding:12px 2px;text-align:left;color:var(--text)}.fixedItem span:first-child{display:flex;flex-direction:column;gap:3px}.fixedItem small{color:var(--muted)}.fixedItem.off{opacity:.55}.fixedCheck{display:flex;align-items:center;gap:10px}.fixedCheck input{width:22px;height:22px;margin:0}";
+  style.textContent=".fixedRows{margin-top:8px}.fixedRow{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-top:1px solid #eee}.fixedRow>div{display:flex;flex-direction:column;gap:3px}.fixedRow small{font-size:10px;color:var(--muted);line-height:1.35}.fixedRight{align-items:flex-end;text-align:right}.autoBadge{font-size:9px;font-weight:800;color:var(--green);background:#dcfce7;padding:3px 6px;border-radius:99px}.fixedHelp{font-size:10px;color:var(--muted);margin:7px 0 0;line-height:1.4}.fixedItem{width:100%;display:flex;align-items:center;justify-content:space-between;border:0;border-bottom:1px solid #eee;background:#fff;padding:12px 2px;text-align:left;color:var(--text)}.fixedItem span:first-child{display:flex;flex-direction:column;gap:3px}.fixedItem small{color:var(--muted)}.fixedItem.off{opacity:.55}.fixedCheck{display:flex;align-items:center;gap:10px}.fixedCheck input{width:22px;height:22px;margin:0}";
   document.head.appendChild(style);
   ensureUI();render();
 })();
