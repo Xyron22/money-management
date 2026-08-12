@@ -19,8 +19,12 @@
     costs.filter(x=>x.active!==false && (!x.startMonth||month>=x.startMonth)).forEach(x=>{
       const id="fixed:"+x.id+":"+month;
       const existing=db.tx.find(t=>String(t.id)===id);
+      const wanted={category:x.category||"Langganan",amount:Number(x.amount)||0,date:billingDate(month,x.day),note:x.name+" / 自動登録・biaya rutin"};
       if(!existing){
-        db.tx.push({id:id,type:"expense",category:x.category||"Langganan",amount:Number(x.amount)||0,date:billingDate(month,x.day),note:x.name+" / 自動登録・biaya rutin",created:new Date(billingDate(month,x.day)+"T12:00:00").getTime(),fixedCostId:x.id});
+        db.tx.push({id:id,type:"expense",category:wanted.category,amount:wanted.amount,date:wanted.date,note:wanted.note,created:new Date(wanted.date+"T12:00:00").getTime(),fixedCostId:x.id});
+        changed=true;
+      }else if(existing.fixedCostId===x.id && (existing.category!==wanted.category || Number(existing.amount)!==wanted.amount || existing.date!==wanted.date || existing.note!==wanted.note)){
+        Object.assign(existing,wanted);
         changed=true;
       }
     });
