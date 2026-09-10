@@ -1,7 +1,7 @@
 "use strict";
 
 (() => {
-  const APP_VERSION = "2.0.0";
+  const APP_VERSION = "2.1.0";
   const STORAGE_KEY = "kaigo_money_final_v1";
   const LEGACY_BASELINE_KEY = "money_management_baseline_income_v1";
   const LEGACY_FIXED_KEY = "money_management_fixed_costs_v1";
@@ -44,6 +44,7 @@
     "Lainnya",
   ];
   const TRANSACTION_TYPES = new Set(["income", "expense", "transfer"]);
+  const DEBT_CURRENCIES = new Set(["IDR", "JPY"]);
 
   const CAT_LABELS = {
     Gaji: {
@@ -120,6 +121,12 @@
     );
   const yen = (value) =>
     `¥${Math.round(Number(value) || 0).toLocaleString("ja-JP")}`;
+  const money = (value, currency = "JPY") => {
+    const amount = Math.max(0, Math.round(Number(value) || 0));
+    return currency === "IDR"
+      ? `Rp${amount.toLocaleString("id-ID")}`
+      : yen(amount);
+  };
   const dual = (jp, idn, extra = "") =>
     `<span class="dual ${extra}"><span class="jp">${jp}</span><span class="idn">${esc(idn)}</span></span>`;
   const catHtml = (key) => {
@@ -303,6 +310,80 @@
     return [...unique.values()];
   }
 
+  function normalizeDebtPayment(raw, debtIndex, paymentIndex) {
+    if (!raw || typeof raw !== "object") return null;
+    const amount = Math.round(Number(raw.amount));
+    const date = String(raw.date || "");
+    if (!Number.isFinite(amount) || amount <= 0 || !validDate(date)) {
+      return null;
+    }
+    return {
+      id: String(
+        raw.id || makeId(`payment_migrated_${debtIndex}_${paymentIndex}_`),
+      ),
+      amount,
+      date,
+      note: String(raw.note || "")
+        .trim()
+        .slice(0, 160),
+      created: Number.isFinite(Number(raw.created))
+        ? Number(raw.created)
+        : new Date(`${date}T12:00:00`).getTime(),
+    };
+  }
+
+  function normalizeDebt(raw, index) {
+    if (!raw || typeof raw !== "object") return null;
+    const creditor = String(raw.creditor || raw.name || "")
+      .trim()
+      .slice(0, 60);
+    const originalAmount = Math.round(
+      Number(raw.originalAmount ?? raw.amount),
+    );
+    const currency = String(raw.currency || "IDR").toUpperCase();
+    const startDate = String(raw.startDate || raw.date || "");
+    if (
+      !creditor ||
+      !Number.isFinite(originalAmount) ||
+      originalAmount <= 0 ||
+      !DEBT_CURRENCIES.has(currency) ||
+      !validDate(startDate)
+    ) {
+      return null;
+    }
+    const payments = new Map();
+    if (Array.isArray(raw.payments)) {
+      raw.payments.forEach((payment, paymentIndex) => {
+        const normalized = normalizeDebtPayment(payment, index, paymentIndex);
+        if (normalized) payments.set(normalized.id, normalized);
+      });
+    }
+    return {
+      id: String(raw.id || makeId(`debt_migrated_${index}_`)),
+      creditor,
+      originalAmount,
+      currency,
+      startDate,
+      note: String(raw.note || "")
+        .trim()
+        .slice(0, 160),
+      created: Number.isFinite(Number(raw.created))
+        ? Number(raw.created)
+        : new Date(`${startDate}T12:00:00`).getTime(),
+      payments: [...payments.values()],
+    };
+  }
+
+  function normalizeDebts(rawDebts) {
+    if (!Array.isArray(rawDebts)) return [];
+    const unique = new Map();
+    rawDebts.forEach((rawDebt, index) => {
+      const debt = normalizeDebt(rawDebt, index);
+      if (debt) unique.set(debt.id, debt);
+    });
+    return [...unique.values()];
+  }
+
   function parseJSON(raw, fallback) {
     try {
       return raw ? JSON.parse(raw) : fallback;
@@ -334,7 +415,7 @@
       budget[key] = Number.isFinite(value) && value >= 0 ? value : 0;
     });
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       appVersion: APP_VERSION,
       budget,
       goal: Math.max(0, Math.round(Number(raw.goal) || 0)),
@@ -342,6 +423,7 @@
       month: validMonth(raw.month) ? raw.month : currentMonthLocal(),
       baselineIncome,
       fixedCosts: normalizeFixedCosts(fixedSource),
+      debts: normalizeDebts(raw.debts),
     };
   }
 
@@ -353,10 +435,11 @@
   let db = loadDatabase();
   let month = db.month;
   let toastTimer = null;
+  let pendingDebtRemoval = null;
 
   function persist({ silent = false } = {}) {
     db.month = month;
-    db.schemaVersion = 2;
+    db.schemaVersion = 3;
     db.appVersion = APP_VERSION;
     const saved = safeStorageSet(STORAGE_KEY, JSON.stringify(db));
     if (!saved && !silent) {
@@ -680,6 +763,113 @@
       <p class="fixedHelp">Tanggal belum tiba = belum masuk pengeluaran dan belum mengurangi saldo. Pada/selepas tanggal tagihan, transaksi dibuat saat aplikasi dibuka.</p>`;
   }
 
+  function debtPaid(debt) {
+    return (debt?.payments || []).reduce(
+      (total, payment) => total + Math.max(0, Number(payment.amount) || 0),
+      0,
+    );
+  }
+
+  function debtRemaining(debt) {
+    return Math.max(0, Number(debt?.originalAmount || 0) - debtPaid(debt));
+  }
+
+  function debtProgress(debt) {
+    if (!debt?.originalAmount) return 0;
+    return Math.min(100, (debtPaid(debt) / debt.originalAmount) * 100);
+  }
+
+  function sortedDebts() {
+    return [...db.debts].sort((left, right) => {
+      const leftDone = debtRemaining(left) === 0;
+      const rightDone = debtRemaining(right) === 0;
+      if (leftDone !== rightDone) return leftDone ? 1 : -1;
+      return (
+        String(right.startDate).localeCompare(String(left.startDate)) ||
+        String(left.creditor).localeCompare(String(right.creditor), "id")
+      );
+    });
+  }
+
+  function debtTotals(currency) {
+    const debts = db.debts.filter((debt) => debt.currency === currency);
+    return {
+      original: debts.reduce(
+        (total, debt) => total + debt.originalAmount,
+        0,
+      ),
+      paid: debts.reduce((total, debt) => total + debtPaid(debt), 0),
+      remaining: debts.reduce(
+        (total, debt) => total + debtRemaining(debt),
+        0,
+      ),
+    };
+  }
+
+  function debtStatusHtml(debt) {
+    return debtRemaining(debt) === 0
+      ? `<span class="debtStatus done">完済・Lunas</span>`
+      : `<span class="debtStatus active">返済中・Belum lunas</span>`;
+  }
+
+  function debtRowHtml(debt, { manager = false } = {}) {
+    const remaining = debtRemaining(debt);
+    const percentage = debtProgress(debt);
+    return `<button class="debtRow ${remaining === 0 ? "done" : ""}" type="button" data-debt-id="${esc(debt.id)}">
+      <span class="debtRowMain">
+        <span class="debtRowTitle"><b>${esc(debt.creditor)}</b>${debtStatusHtml(debt)}</span>
+        <small>${esc(jpDate(debt.startDate))}<br>${esc(idDate(debt.startDate))}${manager ? `<br>${money(debtPaid(debt), debt.currency)} 返済済み・sudah dibayar` : ""}</small>
+        <span class="progress debtProgress"><span class="fill" style="width:${percentage}%"></span></span>
+      </span>
+      <span class="debtRowAmount"><small>${remaining === 0 ? "借入残高・Sisa" : "残り・Sisa"}</small><b>${remaining === 0 ? money(0, debt.currency) : `−${money(remaining, debt.currency)}`}</b><span aria-hidden="true">›</span></span>
+    </button>`;
+  }
+
+  function bindDebtRows(root = document) {
+    root.querySelectorAll("[data-debt-id]").forEach((element) => {
+      element.onclick = () => openDebtDetail(element.dataset.debtId);
+    });
+  }
+
+  function renderDebtSummary() {
+    const root = $("debtSummary");
+    if (!root) return;
+    if (!db.debts.length) {
+      root.innerHTML = `<div class="empty debtEmpty">${dual("<ruby>借金<rt>しゃっきん</rt></ruby>はまだ<ruby>登録<rt>とうろく</rt></ruby>されていません。", "Belum ada utang yang dicatat.")}</div>
+        <button class="btn dark wideButton" id="debtFirstAdd" type="button">${dual("＋ <ruby>借金<rt>しゃっきん</rt></ruby>を<ruby>追加<rt>ついか</rt></ruby>", "Tambah utang", "compact")}</button>`;
+      $("debtFirstAdd").onclick = () => openDebtEdit();
+      return;
+    }
+
+    const currencies = ["IDR", "JPY"].filter((currency) =>
+      db.debts.some((debt) => debt.currency === currency),
+    );
+    const activeDebts = sortedDebts().filter(
+      (debt) => debtRemaining(debt) > 0,
+    );
+    root.innerHTML = `
+      <div class="debtCurrencyBlocks">
+        ${currencies
+          .map((currency) => {
+            const totals = debtTotals(currency);
+            return `<div class="debtCurrencyBlock">
+              <div class="row debtCurrencyHead"><span class="currencyTag">${currency}</span><b class="debtNegative">${totals.remaining ? `−${money(totals.remaining, currency)}` : money(0, currency)}</b></div>
+              <div class="grid3 debtStats">
+                <div class="stat"><small>${dual("<ruby>元金<rt>がんきん</rt></ruby>", "Utang awal", "compact")}</small><b>${money(totals.original, currency)}</b></div>
+                <div class="stat"><small>${dual("<ruby>返済済<rt>へんさいず</rt></ruby>み", "Dibayar", "compact")}</small><b class="debtPaid">+${money(totals.paid, currency)}</b></div>
+                <div class="stat"><small>${dual("<ruby>借入残高<rt>かりいれざんだか</rt></ruby>", "Sisa utang", "compact")}</small><b class="debtNegative">${totals.remaining ? `−${money(totals.remaining, currency)}` : money(0, currency)}</b></div>
+              </div>
+            </div>`;
+          })
+          .join("")}
+      </div>
+      <div class="debtRows">
+        ${activeDebts.length ? activeDebts.slice(0, 4).map((debt) => debtRowHtml(debt)).join("") : `<div class="debtAllPaid">${dual("すべて<ruby>完済<rt>かんさい</rt></ruby>しています。", "Semua utang sudah lunas.")}</div>`}
+      </div>
+      <p class="fixedHelp">Pembayaran di sini mengurangi sisa utang dan tersimpan dalam riwayat. Saldo ¥ serta pengeluaran bulanan tidak berubah, sehingga Rupiah dan Yen tidak tercampur.</p>`;
+    bindDebtRows(root);
+  }
+
   function bindTransactionRows() {
     document.querySelectorAll("[data-txid]").forEach((element) => {
       element.onclick = () => openEdit(element.dataset.txid);
@@ -699,6 +889,7 @@
     renderGoal();
     renderBudget();
     renderFixedCosts();
+    renderDebtSummary();
     renderStats();
 
     const transactions = sortedMonthTransactions();
@@ -873,6 +1064,181 @@
     openModal("fixedEditModal");
   }
 
+  function debtManagerHtml() {
+    if (!db.debts.length) {
+      return `<div class="empty">${dual("登録された借金はありません。", "Belum ada utang yang dicatat.")}</div>`;
+    }
+    const active = sortedDebts().filter((debt) => debtRemaining(debt) > 0);
+    const completed = sortedDebts().filter((debt) => debtRemaining(debt) === 0);
+    return `${
+      active.length
+        ? `<div class="debtSectionLabel">${dual("<ruby>返済中<rt>へんさいちゅう</rt></ruby>", `Belum lunas (${active.length})`, "compact")}</div>${active.map((debt) => debtRowHtml(debt, { manager: true })).join("")}`
+        : `<div class="debtAllPaid">${dual("<ruby>返済中<rt>へんさいちゅう</rt></ruby>の<ruby>借金<rt>しゃっきん</rt></ruby>はありません。", "Tidak ada utang yang belum lunas.")}</div>`
+    }${
+      completed.length
+        ? `<div class="debtSectionLabel completedLabel">${dual("<ruby>完済<rt>かんさい</rt></ruby>", `Lunas (${completed.length})`, "compact")}</div>${completed.map((debt) => debtRowHtml(debt, { manager: true })).join("")}`
+        : ""
+    }`;
+  }
+
+  function renderDebtManager() {
+    const root = $("debtList");
+    if (!root) return;
+    root.innerHTML = debtManagerHtml();
+    bindDebtRows(root);
+  }
+
+  function openDebtManager() {
+    renderDebtManager();
+    openModal("debtModal");
+  }
+
+  function openDebtEdit(id = "") {
+    const debt = db.debts.find((item) => item.id === id);
+    $("debtEditTitle").innerHTML = debt
+      ? dual(
+          "<ruby>借金<rt>しゃっきん</rt></ruby>を<ruby>編集<rt>へんしゅう</rt></ruby>",
+          "Edit utang",
+          "inline",
+        )
+      : dual(
+          "<ruby>借金<rt>しゃっきん</rt></ruby>を<ruby>追加<rt>ついか</rt></ruby>",
+          "Tambah utang",
+          "inline",
+        );
+    $("debtId").value = debt?.id || "";
+    $("debtCreditor").value = debt?.creditor || "";
+    $("debtOriginalAmount").value = debt?.originalAmount || "";
+    $("debtCurrency").value = debt?.currency || "IDR";
+    $("debtStartDate").value = debt?.startDate || localISODate();
+    $("debtNote").value = debt?.note || "";
+    const hasPayments = Boolean(debt?.payments.length);
+    $("debtCurrency").disabled = hasPayments;
+    $("debtCurrencyLock").classList.toggle("hidden", !hasPayments);
+    $("debtDelete").classList.toggle("hidden", !debt);
+    openModal("debtEditModal");
+  }
+
+  function sortedDebtPayments(debt) {
+    return [...(debt?.payments || [])].sort(
+      (left, right) =>
+        String(right.date).localeCompare(String(left.date)) ||
+        Number(right.created || 0) - Number(left.created || 0),
+    );
+  }
+
+  function renderDebtDetail(id) {
+    const debt = db.debts.find((item) => item.id === id);
+    if (!debt) {
+      closeModal("debtDetailModal");
+      return;
+    }
+    $("debtDetailModal").dataset.debtId = debt.id;
+    $("debtDetailTitle").textContent = debt.creditor;
+    const paid = debtPaid(debt);
+    const remaining = debtRemaining(debt);
+    const percentage = debtProgress(debt);
+    const payments = sortedDebtPayments(debt);
+    $("debtDetailContent").innerHTML = `
+      <div class="debtDetailHero">
+        <div class="row"><span class="currencyTag">${debt.currency}</span>${debtStatusHtml(debt)}</div>
+        <small>${dual("<ruby>借入残高<rt>かりいれざんだか</rt></ruby>", "Sisa utang", "compact")}</small>
+        <strong class="debtDetailAmount">${remaining ? `−${money(remaining, debt.currency)}` : money(0, debt.currency)}</strong>
+        <div class="progress debtProgress large"><span class="fill" style="width:${percentage}%"></span></div>
+        <div class="debtProgressText">${Math.round(percentage)}% ${dual("<ruby>返済済<rt>へんさいず</rt></ruby>み", "sudah dibayar", "inline")}</div>
+      </div>
+      <div class="grid3 debtStats debtDetailStats">
+        <div class="stat"><small>${dual("<ruby>元金<rt>がんきん</rt></ruby>", "Utang awal", "compact")}</small><b>${money(debt.originalAmount, debt.currency)}</b></div>
+        <div class="stat"><small>${dual("<ruby>返済済<rt>へんさいず</rt></ruby>み", "Dibayar", "compact")}</small><b class="debtPaid">+${money(paid, debt.currency)}</b></div>
+        <div class="stat"><small>${dual("<ruby>借入日<rt>かりいれび</rt></ruby>", "Tanggal mulai", "compact")}</small><b class="debtDateValue">${esc(jpDate(debt.startDate))}<span>${esc(idDate(debt.startDate))}</span></b></div>
+      </div>
+      ${debt.note ? `<div class="note debtNote"><b>メモ・Catatan</b><br>${esc(debt.note)}</div>` : ""}
+      <div class="actions debtDetailActions">
+        <button class="btn dark" id="debtPayBtn" type="button" ${remaining === 0 ? "disabled" : ""}>${dual("＋ <ruby>返済<rt>へんさい</rt></ruby>", remaining === 0 ? "Sudah lunas" : "Catat pembayaran", "compact")}</button>
+        <button class="btn outline" id="debtEditBtn" type="button">${dual("<ruby>編集<rt>へんしゅう</rt></ruby>", "Edit utang", "compact")}</button>
+      </div>
+      <div class="debtHistoryHead">${dual("<ruby>返済履歴<rt>へんさいりれき</rt></ruby>", "Riwayat pembayaran", "inline")}</div>
+      <div class="debtPaymentList">
+        ${
+          payments.length
+            ? payments
+                .map(
+                  (payment) => `<button class="debtPaymentRow" type="button" data-debt-payment-id="${esc(payment.id)}">
+                    <span><b>${esc(jpDate(payment.date))}</b><small>${esc(idDate(payment.date))}${payment.note ? `<br>${esc(payment.note)}` : ""}</small></span>
+                    <span class="debtPaymentRight"><b>+${money(payment.amount, debt.currency)}</b><small>編集・Edit ›</small></span>
+                  </button>`,
+                )
+                .join("")
+            : `<div class="empty">${dual("<ruby>返済履歴<rt>へんさいりれき</rt></ruby>はまだありません。", "Belum ada pembayaran.")}</div>`
+        }
+      </div>`;
+    $("debtPayBtn").onclick = () => {
+      if (remaining > 0) openDebtPayment(debt.id);
+    };
+    $("debtEditBtn").onclick = () => openDebtEdit(debt.id);
+    $("debtDetailContent")
+      .querySelectorAll("[data-debt-payment-id]")
+      .forEach((element) => {
+        element.onclick = () =>
+          openDebtPayment(debt.id, element.dataset.debtPaymentId);
+      });
+  }
+
+  function openDebtDetail(id) {
+    if (!db.debts.some((debt) => debt.id === id)) return;
+    renderDebtDetail(id);
+    openModal("debtDetailModal");
+  }
+
+  function openDebtPayment(debtId, paymentId = "") {
+    const debt = db.debts.find((item) => item.id === debtId);
+    if (!debt) return;
+    const payment = debt.payments.find((item) => item.id === paymentId);
+    const available = debtRemaining(debt) + Number(payment?.amount || 0);
+    $("debtPaymentTitle").innerHTML = payment
+      ? dual(
+          "<ruby>返済<rt>へんさい</rt></ruby>を<ruby>編集<rt>へんしゅう</rt></ruby>",
+          "Edit pembayaran",
+          "inline",
+        )
+      : dual(
+          "<ruby>返済<rt>へんさい</rt></ruby>を<ruby>追加<rt>ついか</rt></ruby>",
+          "Catat pembayaran",
+          "inline",
+        );
+    $("debtPaymentDebtId").value = debt.id;
+    $("debtPaymentId").value = payment?.id || "";
+    $("debtPaymentSummary").innerHTML = `<b>${esc(debt.creditor)}</b><span>${dual("<ruby>入力可能額<rt>にゅうりょくかのうがく</rt></ruby>", "Maksimal pembayaran", "compact")}</span><strong>${money(available, debt.currency)}</strong>`;
+    $("debtPaymentAmountLabel").innerHTML = dual(
+      `<ruby>返済額<rt>へんさいがく</rt></ruby> (${debt.currency})`,
+      `Jumlah pembayaran (${debt.currency})`,
+      "formdual",
+    );
+    $("debtPaymentAmount").value = payment?.amount || "";
+    $("debtPaymentAmount").max = String(available);
+    $("debtPaymentDate").value = payment?.date || localISODate();
+    $("debtPaymentNote").value = payment?.note || "";
+    $("debtPaymentDelete").classList.toggle("hidden", !payment);
+    openModal("debtPaymentModal");
+  }
+
+  function requestDebtRemoval(kind, debtId, paymentId = "") {
+    const debt = db.debts.find((item) => item.id === debtId);
+    if (!debt) return;
+    pendingDebtRemoval = { kind, debtId, paymentId };
+    $("debtConfirmText").innerHTML =
+      kind === "payment"
+        ? dual(
+            "この<ruby>返済記録<rt>へんさいきろく</rt></ruby>を<ruby>削除<rt>さくじょ</rt></ruby>しますか？<ruby>借入残高<rt>かりいれざんだか</rt></ruby>は<ruby>自動<rt>じどう</rt></ruby>で<ruby>戻<rt>もど</rt></ruby>ります。",
+            "Hapus pembayaran ini? Sisa utang akan bertambah kembali secara otomatis.",
+          )
+        : dual(
+            `「${esc(debt.creditor)}」とすべての<ruby>返済履歴<rt>へんさいりれき</rt></ruby>を<ruby>削除<rt>さくじょ</rt></ruby>しますか？`,
+            `Hapus utang kepada ${debt.creditor} beserta seluruh riwayat pembayarannya?`,
+          );
+    openModal("debtConfirmModal");
+  }
+
   function skipAutomaticTransaction(transaction) {
     const cost = db.fixedCosts.find(
       (item) => item.id === String(transaction.fixedCostId || ""),
@@ -970,6 +1336,19 @@
         .insertAdjacentElement("afterend", card);
     }
 
+    if (!$("debtCard")) {
+      const card = document.createElement("section");
+      card.className = "card debtCard";
+      card.id = "debtCard";
+      card.innerHTML = `
+        <div class="row">
+          <div class="title">💳 ${dual("<ruby>借金管理<rt>しゃっきんかんり</rt></ruby>", "Kelola utang", "inline")}</div>
+          <button class="btn outline" id="debtManage" type="button">${dual("<ruby>管理<rt>かんり</rt></ruby>", "Kelola", "compact")}</button>
+        </div>
+        <div id="debtSummary"></div>`;
+      $("baselineCard").insertAdjacentElement("afterend", card);
+    }
+
     if (!$("fixedCostCard")) {
       const card = document.createElement("section");
       card.className = "card";
@@ -992,6 +1371,13 @@
       actions.innerHTML = `
         <button class="btn outline" id="baselineSet" type="button">💼 ${dual("<ruby>基準収入<rt>きじゅんしゅうにゅう</rt></ruby>", "Patokan pemasukan", "compact")}</button>
         <button class="btn outline" id="fixedSet" type="button">🔁 ${dual("<ruby>固定費<rt>こていひ</rt></ruby>・サブスク", "Biaya rutin", "compact")}</button>`;
+      settingsCard.insertBefore(actions, resetActions);
+    }
+
+    if (!$("debtSet")) {
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      actions.innerHTML = `<button class="btn outline" id="debtSet" type="button">💳 ${dual("<ruby>借金管理<rt>しゃっきんかんり</rt></ruby>", "Kelola utang", "compact")}</button>`;
       settingsCard.insertBefore(actions, resetActions);
     }
 
@@ -1040,6 +1426,93 @@
           <button class="btn dark" type="submit">${dual("<ruby>保存<rt>ほぞん</rt></ruby>", "Simpan", "compact")}</button>
           <button class="btn red hidden" id="fixedDelete" type="button">${dual("<ruby>削除<rt>さくじょ</rt></ruby>", "Hapus biaya rutin", "compact")}</button>
         </form>
+      </div>`;
+      document.body.appendChild(modal);
+    }
+
+    if (!$("debtModal")) {
+      const modal = document.createElement("div");
+      modal.id = "debtModal";
+      modal.className = "modal hidden";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.innerHTML = `<div class="sheet">
+        <div class="row"><b>💳 ${dual("<ruby>借金管理<rt>しゃっきんかんり</rt></ruby>", "Kelola utang", "inline")}</b><button class="btn outline" data-close-extra="debtModal" type="button" aria-label="閉じる / Tutup">✕</button></div>
+        <p class="note">${dual("<ruby>通貨<rt>つうか</rt></ruby>ごとに<ruby>借入残高<rt>かりいれざんだか</rt></ruby>と<ruby>返済履歴<rt>へんさいりれき</rt></ruby>を<ruby>管理<rt>かんり</rt></ruby>します。", "Sisa utang dan pembayaran dihitung terpisah untuk IDR dan JPY.")}</p>
+        <div id="debtList"></div>
+        <button class="btn dark wideButton" id="debtAdd" type="button">${dual("＋ <ruby>借金<rt>しゃっきん</rt></ruby>を<ruby>追加<rt>ついか</rt></ruby>", "Tambah utang", "compact")}</button>
+      </div>`;
+      document.body.appendChild(modal);
+    }
+
+    if (!$("debtEditModal")) {
+      const modal = document.createElement("div");
+      modal.id = "debtEditModal";
+      modal.className = "modal hidden";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.innerHTML = `<div class="sheet">
+        <div class="row"><b id="debtEditTitle"></b><button class="btn outline" data-close-extra="debtEditModal" type="button" aria-label="閉じる / Tutup">✕</button></div>
+        <p class="note">${dual("<ruby>金額<rt>きんがく</rt></ruby>はマイナス<ruby>記号<rt>きごう</rt></ruby>なしで<ruby>入力<rt>にゅうりょく</rt></ruby>してください。", "Masukkan nominal tanpa tanda minus; aplikasi akan menampilkannya sebagai utang.")}</p>
+        <form id="debtForm" class="form modalForm">
+          <input type="hidden" id="debtId">
+          <label>${dual("<ruby>借入先<rt>かりいれさき</rt></ruby>", "Utang kepada siapa", "formdual")}<input id="debtCreditor" maxlength="60" placeholder="例：家族 / Keluarga" required></label>
+          <label>${dual("<ruby>借入額<rt>かりいれがく</rt></ruby>", "Jumlah utang awal", "formdual")}<input id="debtOriginalAmount" type="number" inputmode="numeric" min="1" step="1" placeholder="700000" required></label>
+          <label>${dual("<ruby>通貨<rt>つうか</rt></ruby>", "Mata uang", "formdual")}<select id="debtCurrency"><option value="IDR">IDR — Rupiah (Rp)</option><option value="JPY">JPY — Yen (¥)</option></select><span class="labelhint hidden" id="debtCurrencyLock">Pembayaran sudah ada, jadi mata uang tidak dapat diubah.</span></label>
+          <label>${dual("<ruby>借入日<rt>かりいれび</rt></ruby>", "Tanggal mulai utang", "formdual")}<input id="debtStartDate" type="date" required></label>
+          <label>${dual("メモ", "Catatan (opsional)", "formdual")}<input id="debtNote" maxlength="160" placeholder="例：keperluan keluarga"></label>
+          <button class="btn dark" type="submit">${dual("<ruby>保存<rt>ほぞん</rt></ruby>", "Simpan utang", "compact")}</button>
+          <button class="btn red hidden" id="debtDelete" type="button">${dual("<ruby>借金<rt>しゃっきん</rt></ruby>を<ruby>削除<rt>さくじょ</rt></ruby>", "Hapus utang", "compact")}</button>
+        </form>
+      </div>`;
+      document.body.appendChild(modal);
+    }
+
+    if (!$("debtDetailModal")) {
+      const modal = document.createElement("div");
+      modal.id = "debtDetailModal";
+      modal.className = "modal hidden";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.innerHTML = `<div class="sheet">
+        <div class="row debtDetailHeader"><b id="debtDetailTitle"></b><button class="btn outline" data-close-extra="debtDetailModal" type="button" aria-label="閉じる / Tutup">✕</button></div>
+        <div id="debtDetailContent"></div>
+      </div>`;
+      document.body.appendChild(modal);
+    }
+
+    if (!$("debtPaymentModal")) {
+      const modal = document.createElement("div");
+      modal.id = "debtPaymentModal";
+      modal.className = "modal hidden";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.innerHTML = `<div class="sheet">
+        <div class="row"><b id="debtPaymentTitle"></b><button class="btn outline" data-close-extra="debtPaymentModal" type="button" aria-label="閉じる / Tutup">✕</button></div>
+        <div class="debtPaymentSummary" id="debtPaymentSummary"></div>
+        <form id="debtPaymentForm" class="form modalForm">
+          <input type="hidden" id="debtPaymentDebtId"><input type="hidden" id="debtPaymentId">
+          <label><span id="debtPaymentAmountLabel"></span><input id="debtPaymentAmount" type="number" inputmode="numeric" min="1" step="1" required></label>
+          <label>${dual("<ruby>返済日<rt>へんさいび</rt></ruby>", "Tanggal pembayaran", "formdual")}<input id="debtPaymentDate" type="date" required></label>
+          <label>${dual("メモ", "Catatan (opsional)", "formdual")}<input id="debtPaymentNote" maxlength="160" placeholder="例：transfer bank"></label>
+          <p class="note paymentLedgerNote">${dual("この<ruby>記録<rt>きろく</rt></ruby>は<ruby>借入残高<rt>かりいれざんだか</rt></ruby>だけを<ruby>減<rt>へ</rt></ruby>らします。", "Pembayaran ini hanya mengurangi sisa utang, tidak mengubah saldo ¥ atau pengeluaran bulanan.")}</p>
+          <button class="btn dark" type="submit">${dual("<ruby>返済<rt>へんさい</rt></ruby>を<ruby>保存<rt>ほぞん</rt></ruby>", "Simpan pembayaran", "compact")}</button>
+          <button class="btn red hidden" id="debtPaymentDelete" type="button">${dual("<ruby>返済記録<rt>へんさいきろく</rt></ruby>を<ruby>削除<rt>さくじょ</rt></ruby>", "Hapus pembayaran", "compact")}</button>
+        </form>
+      </div>`;
+      document.body.appendChild(modal);
+    }
+
+    if (!$("debtConfirmModal")) {
+      const modal = document.createElement("div");
+      modal.id = "debtConfirmModal";
+      modal.className = "modal hidden";
+      modal.setAttribute("role", "alertdialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.innerHTML = `<div class="sheet confirmSheet">
+        <b>${dual("<ruby>削除<rt>さくじょ</rt></ruby>しますか？", "Yakin ingin menghapus?")}</b>
+        <div class="note" id="debtConfirmText"></div>
+        <div class="actions"><button class="btn outline" id="debtConfirmCancel" type="button">${dual("キャンセル", "Batal", "compact")}</button><button class="btn red" id="debtConfirmDelete" type="button">${dual("<ruby>削除<rt>さくじょ</rt></ruby>", "Ya, hapus", "compact")}</button></div>
       </div>`;
       document.body.appendChild(modal);
     }
@@ -1101,6 +1574,9 @@
     $("fixedManage").onclick = openFixedManager;
     $("fixedSet").onclick = openFixedManager;
     $("fixedAdd").onclick = () => openFixedEdit();
+    $("debtManage").onclick = openDebtManager;
+    $("debtSet").onclick = openDebtManager;
+    $("debtAdd").onclick = () => openDebtEdit();
     $("exportBtn").onclick = exportBackup;
     $("importBtn").onclick = importBackup;
     $("resetBtn").onclick = () => openModal("resetModal");
@@ -1293,6 +1769,180 @@
       );
     };
 
+    $("debtForm").onsubmit = (event) => {
+      event.preventDefault();
+      const existingId = $("debtId").value;
+      const existingIndex = db.debts.findIndex(
+        (debt) => debt.id === existingId,
+      );
+      const existing = existingIndex >= 0 ? db.debts[existingIndex] : null;
+      const id = existing?.id || makeId("debt_");
+      const creditor = $("debtCreditor").value.trim().slice(0, 60);
+      const originalAmount = Math.round(
+        Number($("debtOriginalAmount").value),
+      );
+      const currency = existing?.payments.length
+        ? existing.currency
+        : $("debtCurrency").value;
+      const startDate = $("debtStartDate").value;
+      const paid = existing ? debtPaid(existing) : 0;
+      if (
+        !creditor ||
+        !Number.isFinite(originalAmount) ||
+        originalAmount <= 0 ||
+        !DEBT_CURRENCIES.has(currency) ||
+        !validDate(startDate)
+      ) {
+        toast(
+          "<ruby>借入先<rt>かりいれさき</rt></ruby>・<ruby>金額<rt>きんがく</rt></ruby>・<ruby>日付<rt>ひづけ</rt></ruby>を<ruby>確認<rt>かくにん</rt></ruby>してください",
+          "Periksa nama, jumlah utang, mata uang, dan tanggal.",
+        );
+        return;
+      }
+      if (originalAmount < paid) {
+        toast(
+          "<ruby>借入額<rt>かりいれがく</rt></ruby>を<ruby>返済済額<rt>へんさいずみがく</rt></ruby>より<ruby>少<rt>すく</rt></ruby>なくできません",
+          `Jumlah awal tidak boleh kurang dari yang sudah dibayar (${money(paid, currency)}).`,
+        );
+        return;
+      }
+      const item = {
+        id,
+        creditor,
+        originalAmount,
+        currency,
+        startDate,
+        note: $("debtNote").value.trim().slice(0, 160),
+        created: existing?.created || Date.now(),
+        payments: existing?.payments || [],
+      };
+      if (existingIndex >= 0) db.debts[existingIndex] = item;
+      else db.debts.push(item);
+      persist();
+      closeModal("debtEditModal");
+      render();
+      renderDebtManager();
+      openDebtDetail(id);
+      toast(
+        "<ruby>借金<rt>しゃっきん</rt></ruby>を<ruby>保存<rt>ほぞん</rt></ruby>しました",
+        "Utang tersimpan",
+      );
+    };
+
+    $("debtDelete").onclick = () => {
+      const debtId = $("debtId").value;
+      if (debtId) requestDebtRemoval("debt", debtId);
+    };
+
+    $("debtPaymentForm").onsubmit = (event) => {
+      event.preventDefault();
+      const debtId = $("debtPaymentDebtId").value;
+      const paymentId = $("debtPaymentId").value;
+      const debt = db.debts.find((item) => item.id === debtId);
+      if (!debt) return;
+      const paymentIndex = paymentId
+        ? debt.payments.findIndex((payment) => payment.id === paymentId)
+        : -1;
+      if (paymentId && paymentIndex < 0) {
+        toast(
+          "<ruby>返済記録<rt>へんさいきろく</rt></ruby>が<ruby>見<rt>み</rt></ruby>つかりません",
+          "Pembayaran tidak ditemukan. Buka ulang detail utang.",
+        );
+        return;
+      }
+      const currentPayment =
+        paymentIndex >= 0 ? debt.payments[paymentIndex] : null;
+      const amount = Math.round(Number($("debtPaymentAmount").value));
+      const date = $("debtPaymentDate").value;
+      const available =
+        debt.originalAmount - debtPaid(debt) + Number(currentPayment?.amount || 0);
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0 ||
+        amount > available ||
+        !validDate(date)
+      ) {
+        toast(
+          "<ruby>返済額<rt>へんさいがく</rt></ruby>と<ruby>日付<rt>ひづけ</rt></ruby>を<ruby>確認<rt>かくにん</rt></ruby>してください",
+          `Pembayaran harus 1 sampai ${money(available, debt.currency)} dan tanggal harus valid.`,
+        );
+        return;
+      }
+      const payment = {
+        id: currentPayment?.id || makeId("payment_"),
+        amount,
+        date,
+        note: $("debtPaymentNote").value.trim().slice(0, 160),
+        created: currentPayment?.created || Date.now(),
+      };
+      if (paymentIndex >= 0) debt.payments[paymentIndex] = payment;
+      else debt.payments.push(payment);
+      persist();
+      closeModal("debtPaymentModal");
+      render();
+      renderDebtManager();
+      renderDebtDetail(debt.id);
+      const remaining = debtRemaining(debt);
+      toast(
+        remaining === 0
+          ? "<ruby>完済<rt>かんさい</rt></ruby>しました"
+          : "<ruby>返済<rt>へんさい</rt></ruby>を<ruby>保存<rt>ほぞん</rt></ruby>しました",
+        remaining === 0
+          ? "Utang sudah lunas"
+          : `Pembayaran tersimpan · sisa ${money(remaining, debt.currency)}`,
+      );
+    };
+
+    $("debtPaymentDelete").onclick = () => {
+      const debtId = $("debtPaymentDebtId").value;
+      const paymentId = $("debtPaymentId").value;
+      if (debtId && paymentId) {
+        requestDebtRemoval("payment", debtId, paymentId);
+      }
+    };
+
+    $("debtConfirmCancel").onclick = () => {
+      pendingDebtRemoval = null;
+      closeModal("debtConfirmModal");
+    };
+
+    $("debtConfirmDelete").onclick = () => {
+      const removal = pendingDebtRemoval;
+      pendingDebtRemoval = null;
+      if (!removal) {
+        closeModal("debtConfirmModal");
+        return;
+      }
+      const debt = db.debts.find((item) => item.id === removal.debtId);
+      if (!debt) {
+        closeModal("debtConfirmModal");
+        return;
+      }
+      if (removal.kind === "payment") {
+        debt.payments = debt.payments.filter(
+          (payment) => payment.id !== removal.paymentId,
+        );
+        closeModal("debtPaymentModal");
+      } else {
+        db.debts = db.debts.filter((item) => item.id !== removal.debtId);
+        closeModal("debtEditModal");
+        closeModal("debtDetailModal");
+      }
+      persist();
+      closeModal("debtConfirmModal");
+      render();
+      renderDebtManager();
+      if (removal.kind === "payment") renderDebtDetail(removal.debtId);
+      toast(
+        removal.kind === "payment"
+          ? "<ruby>返済記録<rt>へんさいきろく</rt></ruby>を<ruby>削除<rt>さくじょ</rt></ruby>しました"
+          : "<ruby>借金<rt>しゃっきん</rt></ruby>を<ruby>削除<rt>さくじょ</rt></ruby>しました",
+        removal.kind === "payment"
+          ? "Pembayaran dihapus; sisa utang dihitung ulang"
+          : "Utang dan riwayat pembayarannya dihapus",
+      );
+    };
+
     $("confirmReset").onclick = () => {
       db = normalizeDatabase(
         {
@@ -1302,6 +1952,7 @@
           month: currentMonthLocal(),
           baselineIncome: DEFAULT_BASELINE,
           fixedCosts: [],
+          debts: [],
         },
         { useLegacy: false },
       );
